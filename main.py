@@ -2,10 +2,8 @@ import socket
 import ssl
 import re
 import base64
-import email
-from email.parser import BytesParser, Parser
+from email.parser import Parser
 from email.policy import default
-from email.parser import HeaderParser
 
 
 class POP3:
@@ -40,9 +38,10 @@ class POP3:
             self.try_to_login()
 
     def main_loop(self):
-        # print(sendrecv('USER mo8y.dick@yandex.ru', sock))
-        # print(sendrecv('PASS password123', sock))
+        # print(self.sendrecv('USER mo8y.dick@yandex.ru'))
+        # self.num_of_messages = int(self.sendrecv('PASS password123').split()[1])
         try:
+            pass
             self.print_messages_info(1, 5)
         except:
             print("something went wrong")
@@ -52,20 +51,32 @@ class POP3:
             try:
                 if command == 'exit':
                     break
+                elif command == "help" or command == "h":
+                    print("""exit - выход из программы
+info NUM - посмотреть информацию о сообщении
+list START FINISH - посмотреть информацию о диапазоне сообщений
+read NUM - прочитать сообщение
+read_top NUM LINES - прочитать первые несколько строк сообщения
+get_attachment NUM - скачать прикрепленный файл
+                    """)
                 elif re.match("info \d+", command):
                     self.print_messages_info(int(re.search("\d+", command).group()))
-                elif re.match("range \d+ \d+", command):
+                elif re.match("list \d+ \d+", command):
                     rng = re.findall("\d+", command)
                     self.print_messages_info(int(rng[0]), int(rng[1]))
                 elif re.match("read \d+", command):
                     self.print_message(int(re.search("\d+", command).group()))
                 elif re.match("read_top \d+ \d+", command):
-                    break
+                    rng = re.findall("\d+", command)
+                    self.print_message(int(rng[0]), int(rng[1]))
+                elif re.match("get_attachment \d+", command):
+                    self.download_attachment(int(re.search("\d+", command).group()))
                 else:
                     raise ValueError
-            except:
+            except Exception as e:
                 print('something went wrong, try again')
                 print("for help type 'h' or 'help'")
+                print(e)
         self.sendrecv('QUIT')
 
     def print_messages_info(self, first, count = 1):
@@ -74,25 +85,56 @@ class POP3:
         last = min(first + count, self.num_of_messages + 1)
         for i in range(first, last):
             print("№", i)
-            message = self.sendrecv('RETR ' + str(i))
-            message = "\n".join(message.split("\n")[1:])
-            self.parse_message(message)
+            self.get_and_parse(i)
             self.print_message_info()
 
     def print_message_info(self):
-        # print(re.search('^To:[.\n]*[< ](.*?@.*?)[> ]?$, message, re.MULTILINE).group())
-        # print(re.search('^From:[.\n]*[< ](.*?@.*?)[> ]?$', message, re.MULTILINE).group())
-        # print('Subject: ' + get_subject(message))
         print('From: ' + self.parsed_message.get('from', "empty"))
         print('To: ' + self.parsed_message.get('to', "empty"))
         print('Subject: ' + self.parsed_message.get('subject', "empty"))
+        for part in self.parsed_message.walk():
+            if str(part).startswith('Content-Disposition: attachment'):
+                filename = re.findall('filename="(.*?)"', str(part))[0]
+                print("Has attachment: " + filename)
 
-    def print_message(self, num):
-        message = self.sendrecv('RETR ' + str(num))
+    def get_and_parse(self, n):
+        message = self.sendrecv('RETR ' + str(n))
         message = "\n".join(message.split("\n")[1:])
         self.parse_message(message)
+
+    def print_message(self, num, top = None):
+        self.get_and_parse(num)
         self.print_message_info()
-        print('Message: ' + str(self.parsed_message.get_payload()))
+        body = self.get_body()
+        if top:
+            spt = body.split('\n')
+            print(spt[0:min(len(spt), top)])
+        else:
+            print(body)
+
+    def download_attachment(self, num):
+        self.get_and_parse(num)
+        for part in self.parsed_message.walk():
+            if str(part).startswith('Content-Disposition: attachment'):
+                filename = re.findall('filename="(.*?)"', str(part))[0]
+                f = open(filename, 'wb+')
+                for line in part.get_payload().split("\r\n"):
+                    f.write(base64.b64decode(line))
+                f.close()
+        print("success")
+
+    def get_body(self):
+        body = 'empty'
+        for part in self.parsed_message.walk():
+            if part.get_content_type() == 'text/plain':
+                body = part.get_payload()
+                break
+        else:
+            for part in self.parsed_message.walk():
+                if part.get_content_type() == 'text/html':
+                    body = part.get_payload()
+                    break
+        return body
 
     def parse_message(self, message):
         self.parsed_message = Parser(policy=default).parsestr(message)
@@ -112,16 +154,6 @@ class POP3:
         if result != '' and result.split()[0] != "+OK":
             raise ValueError
         return result
-
-
-def get_subject(message):
-    result = re.findall('(Subject: |\s)=\?utf-8\?B\?(.*?)\?=', message, re.IGNORECASE)
-    if not result:
-        return re.findall('Subject: (.*?)\n', message)[0]
-    for line in range(len(result)):
-        result[line] = base64.b64decode(result[line][1]).decode()
-    return ''.join(result)
-
 
 if __name__ == '__main__':
     client = POP3(('pop.yandex.ru', 995))
