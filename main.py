@@ -108,7 +108,7 @@ get_attachment NUM - скачать прикрепленный файл
         body = self.get_body()
         if top:
             spt = body.split('\n')
-            print(spt[0:min(len(spt), top)])
+            print('\n'.join(spt[0:min(len(spt), top)]))
         else:
             print(body)
 
