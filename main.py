@@ -17,7 +17,7 @@ class POP3:
         try:
             self.sock = socket.socket()
             self.sock = ssl.wrap_socket(self.sock)
-            self.sock.settimeout(0.5)
+            self.sock.settimeout(1)
             self.sock.connect(self.server_addr)
             self.sock.recv(1024).decode()
         except:
@@ -53,11 +53,11 @@ class POP3:
                     break
                 elif command == "help" or command == "h":
                     print("""exit - выход из программы
-info NUM - посмотреть информацию о сообщении
-list START FINISH - посмотреть информацию о диапазоне сообщений
-read NUM - прочитать сообщение
-read_top NUM LINES - прочитать первые несколько строк сообщения
-get_attachment NUM - скачать прикрепленный файл
+info [NUM] - посмотреть информацию о сообщении
+list [START] [FINISH] - посмотреть информацию о диапазоне сообщений
+read [NUM] - прочитать сообщение
+read_top [NUM] [LINES] - прочитать первые несколько строк сообщения
+get_attach [NUM] - скачать прикрепленный файл
                     """)
                 elif re.match("info \d+", command):
                     self.print_messages_info(int(re.search("\d+", command).group()))
@@ -69,7 +69,7 @@ get_attachment NUM - скачать прикрепленный файл
                 elif re.match("read_top \d+ \d+", command):
                     rng = re.findall("\d+", command)
                     self.print_message(int(rng[0]), int(rng[1]))
-                elif re.match("get_attachment \d+", command):
+                elif re.match("get_attach \d+", command):
                     self.download_attachment(int(re.search("\d+", command).group()))
                 else:
                     raise ValueError
@@ -84,7 +84,7 @@ get_attachment NUM - скачать прикрепленный файл
             raise ValueError
         last = min(first + count, self.num_of_messages + 1)
         for i in range(first, last):
-            print("№", i)
+            print("\n№", i)
             self.get_and_parse(i)
             self.print_message_info()
 
@@ -121,7 +121,10 @@ get_attachment NUM - скачать прикрепленный файл
                 for line in part.get_payload().split("\r\n"):
                     f.write(base64.b64decode(line))
                 f.close()
-        print("success")
+                print("saved as " + filename)
+                break
+        else:
+            print("no attachments")
 
     def get_body(self):
         body = 'empty'
